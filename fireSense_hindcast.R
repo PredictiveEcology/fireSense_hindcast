@@ -12,6 +12,8 @@ defineModule(sim, list(
   timeunit = "year",
   citation = list("citation.bib"),
   documentation = list("NEWS.md", "README.md", "fireSense_hindcast.Rmd"),
+  loadOrder = list(after = c("canClimateData"),
+                   before = c("fireSense_dataPrepFit")),
   reqdPkgs = list(
     "PredictiveEcology/SpaDES.core@sequentialCaching (>= 2.0.3.9007)", ## TODO: use development
     "terra"
@@ -61,14 +63,8 @@ doEvent.fireSense_hindcast = function(sim, eventTime, eventType) {
   switch(
     eventType,
     init = {
-      ### check for more detailed object dependencies:
-      ### (use `checkObject` or similar)
-
-      # do stuff for this event
-      sim <- Init(sim)
-
-      # schedule future event(s)
-      sim <- scheduleEvent(sim, P(sim)$.saveInitialTime, "fireSense_hindcast", "SampleHistoric")
+      ## schedule future event(s)
+      sim <- scheduleEvent(sim, start(sim), "fireSense_hindcast", "SampleHistoric")
     },
     SampleHistoric = {
       sim <- HistoricAsProjected(sim)
@@ -82,21 +78,16 @@ doEvent.fireSense_hindcast = function(sim, eventTime, eventType) {
 ## event functions
 #   - keep event functions short and clean, modularize by calling subroutines from section below.
 
-### template initialization
-Init <- function(sim) {
-  ## TODO
-
-  return(invisible(sim))
-}
-
 HistoricAsProjected <- function(sim) {
-  ## 1. identify projected variables and number of layers (years) in each
-  ## 2. if projected climVar exists in historic variables already, take N samples;
-  ##    if not, need to prepare the historic equivalents of the future variables, taking N samples.
-  ## 3. update the project climate layers using the historic samples
-  sampledHistoric <- lapply(sim$projectedClimateRasters, function(x) {
-    sim$historicalClimateRasters
+  browser()
+  climateVariables <- names(sim$projectedClimateRasters)
+  sampledHistoric <- lapply(climateVariables, function(climVar) {
+    rndsmp <- sample(x = terra::nlyr(sim$historicalClimateRasters[[climVar]]),
+                     size = terra::nlyr(sim$projectedClimateRasters[[climVar]]),
+                     replace = TRUE)
+    sim$historicalClimateRasters[[climVar]][rndsmp]
   })
+  names(sampledHistoric) <- climateVariables
 
   sim$projectedClimateRasters <- sampledHistoric
 
@@ -108,6 +99,10 @@ HistoricAsProjected <- function(sim) {
   message(currentModule(sim), ": using dataPath '", dPath, "'.")
 
   # ! ----- EDIT BELOW ----- ! #
+  if (!suppliedElsewhere("historicalClimateRasters", sim) ||
+      !suppliedElsewhere("projectedClimateRasters", sim)) {
+    stop("climate rasters must be supplied, e.g., via canClimateData")
+  }
 
   # ! ----- STOP EDITING ----- ! #
   return(invisible(sim))
